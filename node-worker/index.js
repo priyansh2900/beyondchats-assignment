@@ -3,7 +3,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 
 const api = axios.create({
-  baseURL: process.env.LARAVEL_API_BASE || 'http://127.0.0.1:8000',
+  baseURL: process.env.LARAVEL_API_BASE || 'https://beyondchats-assignment-03qq.onrender.com',
 });
 
 // 1) Fetch latest article from Laravel
