@@ -1,4 +1,5 @@
 require('dotenv').config();
+const http = require('http');
 const axios = require('axios');
 const cheerio = require('cheerio');
 
@@ -19,7 +20,10 @@ async function getLatestArticle() {
 // 2) Scrape main content from a URL
 async function scrapeArticleContent(url) {
   const res = await axios.get(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    },
   });
   const $ = cheerio.load(res.data);
   const candidates = ['article', 'main', 'div[class*="content"]', 'div[class*="post"]'];
@@ -36,17 +40,17 @@ async function scrapeArticleContent(url) {
   return text.slice(0, 4000);
 }
 
-// 3) Smart LLM fallback (100% works)
+// 3) Smart LLM fallback (mocked)
 async function callOpenAI(latest, contents) {
   console.log('🤖 Using smart LLM fallback...');
-  
+
   const enhancements = [
     'Recent studies show AI improving diagnostic accuracy by 20-30% in radiology.',
     'Real-world deployments: AI chatbots reduced patient wait times by 40%.',
     'Challenges remain: data privacy, regulatory approval, integration costs.',
     'Success stories: Mayo Clinic uses AI for predictive analytics.',
   ];
-  
+
   const updatedContent = `${latest.content}
 
 **Latest Insights (2025):**
@@ -59,18 +63,23 @@ Drawing from recent industry reports, AI shows proven value in diagnostics and p
   return updatedContent;
 }
 
-// 4) POST with ALL required Laravel fields
+// 4) POST updated article
 async function postUpdatedArticle(latest, updatedContent, references) {
-  const baseSlug = latest.title.toLowerCase()
+  const baseSlug = latest.title
+    .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .replace(/^-+|-+$/g, '');
-  const slug = `${baseSlug}-updated-v2`;  // ✅ UNIQUE
+  const slug = `${baseSlug}-updated-v2`;
 
   const payload = {
     title: `${latest.title} (AI Enhanced)`,
-    slug: slug,
-    content: updatedContent + `\n\n**References:**\n${references.map(r => `- [${r.title}](${r.url})`).join('\n')}`,
+    slug,
+    content:
+      updatedContent +
+      `\n\n**References:**\n${references
+        .map((r) => `- [${r.title}](${r.url})`)
+        .join('\n')}`,
     source_url: references[0].url,
     is_updated: true,
   };
@@ -80,16 +89,24 @@ async function postUpdatedArticle(latest, updatedContent, references) {
   return res.data;
 }
 
-
 // 5) Main pipeline
 async function main() {
   try {
     const latest = await getLatestArticle();
-    if (!latest) return;
+    if (!latest) {
+      console.log('No articles found');
+      return;
+    }
 
     const results = [
-      { title: 'AI In Healthcare: Hype Or Reality? - BeyondChats', url: 'https://beyondchats.com/blogs/ai-in-healthcare-hype-or-reality/' },
-      { title: 'Hype vs reality: AI technology in healthcare - Notable Health', url: 'https://www.notablehealth.com/blog/ai-technology-in-healthcare' },
+      {
+        title: 'AI In Healthcare: Hype Or Reality? - BeyondChats',
+        url: 'https://beyondchats.com/blogs/ai-in-healthcare-hype-or-reality/',
+      },
+      {
+        title: 'Hype vs reality: AI technology in healthcare - Notable Health',
+        url: 'https://www.notablehealth.com/blog/ai-technology-in-healthcare',
+      },
     ];
 
     console.log('Using reference URLs:');
@@ -107,10 +124,20 @@ async function main() {
     console.log('\n📤 Posting to Laravel...');
     await postUpdatedArticle(latest, updatedContent, results);
     console.log('🎉 FULL PIPELINE COMPLETE! ✅');
-
   } catch (err) {
     console.error('Error:', err.response?.data || err.message);
   }
 }
 
-main();
+// 6) Tiny HTTP server so Render Free Web Service is happy
+const PORT = process.env.PORT || 10000;
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Node worker is running');
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`HTTP server listening on port ${PORT}`);
+  main().catch((err) => console.error('Worker error:', err));
+});
